@@ -19,12 +19,12 @@ export default async function NegocioPage() {
 
   const program = data as unknown as Program | null;
   if (!program?.business) {
-    return <main><div className="card"><h1 style={{ fontSize: "2.5rem" }}>No hay un programa activo</h1><p>Crea primero un negocio y su programa de sellos desde Supabase.</p></div></main>;
+    return <main><div className="card narrow-card"><h1 className="page-title">No hay un programa activo</h1><p>Crea primero un negocio y su programa de sellos desde Supabase.</p></div></main>;
   }
 
   return <main>
     <p className="brand">{program.business.name.toUpperCase()}</p>
-    <h1 style={{ fontSize: "3.2rem" }}>Panel de caja</h1>
+    <h1 className="page-title">Panel de caja</h1>
     <p>Prueba temporal sin login. Programa: <strong>{program.stamps_needed} sellos = {program.reward_name}</strong>.</p>
     <div className="grid">
       <section className="card"><h2>Registrar compra</h2><p>Escribe el correo con el que creaste al cliente en Supabase.</p><StampForm businessId={program.business.id} /></section>
