@@ -1,14 +1,34 @@
 import { createClient } from "@/lib/supabase/server";
-import { redirect } from "next/navigation";
 import { StampForm, RedeemForm } from "@/components/business-form";
-import { signOut } from "@/app/auth/actions";
+
+type Program = {
+  id: string;
+  stamps_needed: number;
+  reward_name: string;
+  business: { id: string; name: string } | null;
+};
 
 export default async function NegocioPage() {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect("/auth");
-  const { data: memberships } = await supabase.from("business_memberships").select("business:businesses(id, name)").eq("user_id", user.id).in("role", ["owner", "staff"]);
-  const business = memberships?.[0]?.business as unknown as { id: string; name: string } | null;
-  if (!business) return <main><div className="card"><h1 style={{ fontSize: "2.5rem" }}>Panel de negocio</h1><p>Tu cuenta aún no tiene acceso de personal. Sigue el apartado <strong>Primer negocio</strong> del README para añadirla con SQL.</p><form action={signOut}><button className="secondary">Cerrar sesión</button></form></div></main>;
-  return <main><p className="brand">{business.name.toUpperCase()}</p><h1 style={{ fontSize: "3.2rem" }}>Panel de caja</h1><p>Solo usa el correo con el que el cliente se registró.</p><div className="grid"><section className="card"><h2>Registrar compra</h2><p>Agrega un sello por una compra confirmada.</p><StampForm businessId={business.id} /></section><section className="card"><h2>Canjear recompensa</h2><p>Verifica que el cliente tenga sellos suficientes antes de entregar el premio.</p><RedeemForm businessId={business.id} /></section></div></main>;
+  const { data } = await supabase
+    .from("loyalty_programs")
+    .select("id, stamps_needed, reward_name, business:businesses(id, name)")
+    .eq("active", true)
+    .limit(1)
+    .maybeSingle();
+
+  const program = data as unknown as Program | null;
+  if (!program?.business) {
+    return <main><div className="card"><h1 style={{ fontSize: "2.5rem" }}>No hay un programa activo</h1><p>Crea primero un negocio y su programa de sellos desde Supabase.</p></div></main>;
+  }
+
+  return <main>
+    <p className="brand">{program.business.name.toUpperCase()}</p>
+    <h1 style={{ fontSize: "3.2rem" }}>Panel de caja</h1>
+    <p>Prueba temporal sin login. Programa: <strong>{program.stamps_needed} sellos = {program.reward_name}</strong>.</p>
+    <div className="grid">
+      <section className="card"><h2>Registrar compra</h2><p>Escribe el correo con el que creaste al cliente en Supabase.</p><StampForm businessId={program.business.id} /></section>
+      <section className="card"><h2>Canjear recompensa</h2><p>Solo se podrá canjear si el cliente ya alcanzó la meta.</p><RedeemForm businessId={program.business.id} /></section>
+    </div>
+  </main>;
 }
