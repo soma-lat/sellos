@@ -1,23 +1,58 @@
-import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { redirect } from "next/navigation";
 
-type Card = { stamps: number; program: { business: { name: string } | null; stamps_needed: number; reward_name: string } | null };
+type LoyaltyCard = {
+  stamps: number;
+  program: {
+    stamps_needed: number;
+    reward_name: string;
+    business: { name: string } | null;
+  } | null;
+};
 
-export default async function ClientePage() {
+export default async function ClientePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ email?: string }>;
+}) {
+  const { email = "cliente@prueba.com" } = await searchParams;
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect("/auth");
-  const { data } = await supabase.from("loyalty_cards").select("stamps, program:loyalty_programs(business:businesses(name), stamps_needed, reward_name)").order("updated_at", { ascending: false }).limit(1).maybeSingle();
-  const card = data as unknown as Card | null;
-  if (!card?.program) return <main><div className="card"><h1 style={{ fontSize: "2.5rem" }}>Tu tarjeta está lista</h1><p>Aún no participas en un programa. Pide al negocio que registre tu primera compra usando <strong>{user.email}</strong>.</p><Link className="button" href="/negocio">Ir al panel de negocio</Link></div></main>;
+
+  const { data: customer } = await supabase
+    .from("customers")
+    .select("id, full_name, email")
+    .eq("email", email.toLowerCase())
+    .maybeSingle();
+
+  if (!customer) {
+    return <main><div className="card"><h1 style={{ fontSize: "2.5rem" }}>Cliente no encontrado</h1><p>No existe una tarjeta asociada a <strong>{email}</strong>.</p></div></main>;
+  }
+
+  const { data } = await supabase
+    .from("loyalty_cards")
+    .select("stamps, program:loyalty_programs(stamps_needed, reward_name, business:businesses(name))")
+    .eq("customer_id", customer.id)
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const card = data as unknown as LoyaltyCard | null;
+  if (!card?.program) {
+    return <main><div className="card"><h1 style={{ fontSize: "2.5rem" }}>Aún no tienes tarjeta</h1><p>{customer.full_name ?? customer.email} todavía no participa en un programa de sellos.</p></div></main>;
+  }
+
   const { stamps_needed, reward_name, business } = card.program;
   const stamps = card.stamps;
   const available = stamps >= stamps_needed;
-  return <main><p className="brand">{business?.name ?? "CLUB DE LEALTAD"}</p><h1 style={{ fontSize: "3.2rem" }}>Mi tarjeta</h1><div className="card" style={{ maxWidth: "620px" }}>
-    <h2>{available ? "¡Tu recompensa está lista!" : `Llevas ${stamps} de ${stamps_needed} sellos`}</h2>
-    <div className="progress"><span style={{ width: `${Math.min(100, (stamps / stamps_needed) * 100)}%` }} /></div>
-    <div className="stamps">{Array.from({ length: stamps_needed }, (_, i) => <span className={`stamp ${i < stamps ? "on" : ""}`} key={i}>{i < stamps ? "✓" : i + 1}</span>)}</div>
-    <p>{available ? <>Presenta tu correo al personal para canjear: <strong>{reward_name}</strong>.</> : <>Te faltan <strong>{stamps_needed - stamps}</strong> compras para obtener: <strong>{reward_name}</strong>.</>}</p>
-  </div></main>;
+
+  return <main>
+    <p className="brand">{business?.name?.toUpperCase() ?? "CLUB DE LEALTAD"}</p>
+    <h1 style={{ fontSize: "3.2rem" }}>Hola, {customer.full_name ?? "cliente"}</h1>
+    <div className="card" style={{ maxWidth: "620px" }}>
+      <h2>{available ? "¡Tu recompensa está lista!" : `Llevas ${stamps} de ${stamps_needed} sellos`}</h2>
+      <div className="progress"><span style={{ width: `${Math.min(100, (stamps / stamps_needed) * 100)}%` }} /></div>
+      <div className="stamps">{Array.from({ length: stamps_needed }, (_, index) => <span className={`stamp ${index < stamps ? "on" : ""}`} key={index}>{index < stamps ? "✓" : index + 1}</span>)}</div>
+      <p>{available ? <>Puedes canjear: <strong>{reward_name}</strong>.</> : <>Te faltan <strong>{stamps_needed - stamps}</strong> sellos para obtener: <strong>{reward_name}</strong>.</>}</p>
+      <p className="muted">Prueba temporal: <code>/cliente?email=cliente@prueba.com</code></p>
+    </div>
+  </main>;
 }
